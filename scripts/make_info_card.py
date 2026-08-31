@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """
 Generate an animated neofetch-style terminal info card SVG for Anass Agdi.
-Includes terminal title bar, user prompt, structured key-value stats,
-and terminal ANSI color palette swatches.
-
-Line-by-line staggered animation plays on load, then holds.
+Uses pure SMIL animations (100% compatible with GitHub's SVG renderer & camo proxy).
 """
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "info-card.svg")
-
-STATIC = bool(os.environ.get("STATIC"))
 
 CANVAS_W = 490
 CANVAS_H = 432
@@ -28,10 +23,8 @@ KEY_COLOR = "#58a6ff"
 VAL_COLOR = "#c9d1d9"
 ACCENT_GREEN = "#3fb950"
 ACCENT_CYAN = "#38bdf8"
-ACCENT_YELLOW = "#e3b341"
 
-LINE_DUR = 0.4
-STAGGER = 0.12
+STAGGER = 0.10
 
 info_lines = [
     {"type": "prompt", "user": "anass", "host": "agdi-ai", "cmd": "neofetch --short"},
@@ -39,13 +32,13 @@ info_lines = [
     {"key": "User", "val": "Anass Agdi", "hl": True},
     {"key": "Role", "val": "AI Engineer & Automation Architect"},
     {"key": "Company", "val": "Agdi AI (agdi.ai)"},
-    {"key": "Location", "val": "Ibiza, Spain 🇪🇸"},
-    {"key": "Focus", "val": "AI Agents · Autonomous Systems · Full-Stack SaaS"},
-    {"key": "Core Stack", "val": "Python, TypeScript, Next.js, FastAPI, Node.js"},
-    {"key": "AI & Data", "val": "LLMs, PyTorch, LangChain, Claude Code, Vector DBs"},
-    {"key": "DevOps & Tools", "val": "Docker, GitHub Actions, Playwright, Linux, n8n"},
-    {"key": "Website", "val": "anassagdi.site", "link": "https://anassagdi.site"},
-    {"key": "Status", "val": "🚀 Shipping intelligent agents & high-impact software", "status": True},
+    {"key": "Location", "val": "Ibiza, Spain [ES]"},
+    {"key": "Focus", "val": "AI Agents | Autonomous Systems | SaaS"},
+    {"key": "Core Stack", "val": "Python, TypeScript, Next.js, FastAPI, Node"},
+    {"key": "AI & Data", "val": "LLMs, PyTorch, LangChain, Vector DBs"},
+    {"key": "DevOps", "val": "Docker, GitHub Actions, Playwright, Linux"},
+    {"key": "Website", "val": "anassagdi.site"},
+    {"key": "Status", "val": "> Building & Shipping AI systems", "status": True},
 ]
 
 PALETTE = [
@@ -55,6 +48,7 @@ PALETTE = [
 
 def render():
     parts = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS_W}" height="{CANVAS_H}" '
         f'viewBox="0 0 {CANVAS_W} {CANVAS_H}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">',
         '<defs>',
@@ -62,16 +56,8 @@ def render():
         f'<stop offset="0" stop-color="{BG2}"/><stop offset="1" stop-color="{BG}"/>'
         '</linearGradient>',
         '</defs>',
-        '<style>',
-        '@keyframes fadeSlide {',
-        '  0%   { opacity: 0; transform: translateY(6px); }',
-        '  100% { opacity: 1; transform: translateY(0); }',
-        '}',
-        f'.line {{ opacity: 0; animation: fadeSlide {LINE_DUR:.2f}s cubic-bezier(.2,.8,.2,1) both; }}',
-        '</style>' if not STATIC else '',
         f'<rect width="{CANVAS_W}" height="{CANVAS_H}" rx="12" fill="url(#cbg)"/>',
-        f'<rect x="0.5" y="0.5" width="{CANVAS_W-1}" height="{CANVAS_H-1}" rx="12" '
-        f'fill="none" stroke="{FRAME}" stroke-width="1"/>',
+        f'<rect x="0.5" y="0.5" width="{CANVAS_W-1}" height="{CANVAS_H-1}" rx="12" fill="none" stroke="{FRAME}" stroke-width="1"/>',
         f'<line x1="0" y1="{TITLEBAR_H}" x2="{CANVAS_W}" y2="{TITLEBAR_H}" stroke="{FRAME}"/>',
     ]
 
@@ -86,11 +72,11 @@ def render():
     for idx, item in enumerate(info_lines):
         y = start_y + idx * line_h
         delay = idx * STAGGER
-        anim_attr = f' class="line" style="animation-delay:{delay:.3f}s"' if not STATIC else ''
 
         if item.get("type") == "prompt":
             parts.append(
-                f'<g{anim_attr}>'
+                f'<g opacity="0">'
+                f'<set attributeName="opacity" to="1" begin="{delay:.2f}s"/>'
                 f'<text x="{PAD}" y="{y}" font-size="13">'
                 f'<tspan fill="{ACCENT_GREEN}" font-weight="700">{item["user"]}@{item["host"]}</tspan>'
                 f'<tspan fill="{MUTED}">:$ </tspan>'
@@ -99,7 +85,8 @@ def render():
             )
         elif item.get("type") == "separator":
             parts.append(
-                f'<g{anim_attr}>'
+                f'<g opacity="0">'
+                f'<set attributeName="opacity" to="1" begin="{delay:.2f}s"/>'
                 f'<line x1="{PAD}" y1="{y-6}" x2="{CANVAS_W-PAD}" y2="{y-6}" stroke="{FRAME}" stroke-opacity="0.6"/>'
                 f'</g>'
             )
@@ -109,7 +96,8 @@ def render():
             val_fill = ACCENT_CYAN if item.get("hl") else (ACCENT_GREEN if item.get("status") else VAL_COLOR)
             font_weight = "bold" if item.get("hl") else "normal"
             parts.append(
-                f'<g{anim_attr}>'
+                f'<g opacity="0">'
+                f'<set attributeName="opacity" to="1" begin="{delay:.2f}s"/>'
                 f'<text x="{PAD}" y="{y}" font-size="12">'
                 f'<tspan fill="{KEY_COLOR}" font-weight="600">{k:<14}</tspan>'
                 f'<tspan fill="{MUTED}">: </tspan>'
@@ -120,9 +108,8 @@ def render():
     # ANSI palette dots at bottom
     pal_y = start_y + len(info_lines) * line_h + 12
     delay = len(info_lines) * STAGGER
-    anim_attr = f' class="line" style="animation-delay:{delay:.3f}s"' if not STATIC else ''
     
-    parts.append(f'<g{anim_attr}>')
+    parts.append(f'<g opacity="0"><set attributeName="opacity" to="1" begin="{delay:.2f}s"/>')
     parts.append(f'<line x1="{PAD}" y1="{pal_y-14}" x2="{CANVAS_W-PAD}" y2="{pal_y-14}" stroke="{FRAME}" stroke-opacity="0.4"/>')
     swatch_w = 22
     swatch_h = 10
@@ -137,6 +124,6 @@ def render():
 
 if __name__ == "__main__":
     svg = render()
-    with open(OUT, "w") as f:
+    with open(OUT, "w", encoding="utf-8") as f:
         f.write(svg)
     print(f"wrote {OUT} ({len(svg)} bytes)")
