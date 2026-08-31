@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
 Generate an animated neofetch-style terminal info card SVG for Anass Agdi.
-Uses pure SMIL animations (100% compatible with GitHub's SVG renderer & camo proxy).
+Uses pure SMIL animations (100% compliant with GitHub SVG rendering).
+Strictly escapes all XML characters (&, <, >).
 """
+import html
 import os
 import sys
+import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "info-card.svg")
@@ -24,7 +27,7 @@ VAL_COLOR = "#c9d1d9"
 ACCENT_GREEN = "#3fb950"
 ACCENT_CYAN = "#38bdf8"
 
-STAGGER = 0.10
+STAGGER = 0.08
 
 info_lines = [
     {"type": "prompt", "user": "anass", "host": "agdi-ai", "cmd": "neofetch --short"},
@@ -48,7 +51,6 @@ PALETTE = [
 
 def render():
     parts = [
-        '<?xml version="1.0" encoding="UTF-8"?>',
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{CANVAS_W}" height="{CANVAS_H}" '
         f'viewBox="0 0 {CANVAS_W} {CANVAS_H}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace">',
         '<defs>',
@@ -74,13 +76,15 @@ def render():
         delay = idx * STAGGER
 
         if item.get("type") == "prompt":
+            u = html.escape(f"{item['user']}@{item['host']}")
+            cmd = html.escape(item["cmd"])
             parts.append(
                 f'<g opacity="0">'
                 f'<set attributeName="opacity" to="1" begin="{delay:.2f}s"/>'
                 f'<text x="{PAD}" y="{y}" font-size="13">'
-                f'<tspan fill="{ACCENT_GREEN}" font-weight="700">{item["user"]}@{item["host"]}</tspan>'
+                f'<tspan fill="{ACCENT_GREEN}" font-weight="700">{u}</tspan>'
                 f'<tspan fill="{MUTED}">:$ </tspan>'
-                f'<tspan fill="{VAL_COLOR}">{item["cmd"]}</tspan>'
+                f'<tspan fill="{VAL_COLOR}">{cmd}</tspan>'
                 f'</text></g>'
             )
         elif item.get("type") == "separator":
@@ -91,21 +95,20 @@ def render():
                 f'</g>'
             )
         else:
-            k = item["key"]
-            v = item["val"]
+            k = html.escape(f"{item['key']:<14}")
+            v = html.escape(item["val"])
             val_fill = ACCENT_CYAN if item.get("hl") else (ACCENT_GREEN if item.get("status") else VAL_COLOR)
             font_weight = "bold" if item.get("hl") else "normal"
             parts.append(
                 f'<g opacity="0">'
                 f'<set attributeName="opacity" to="1" begin="{delay:.2f}s"/>'
                 f'<text x="{PAD}" y="{y}" font-size="12">'
-                f'<tspan fill="{KEY_COLOR}" font-weight="600">{k:<14}</tspan>'
+                f'<tspan fill="{KEY_COLOR}" font-weight="600">{k}</tspan>'
                 f'<tspan fill="{MUTED}">: </tspan>'
                 f'<tspan fill="{val_fill}" font-weight="{font_weight}">{v}</tspan>'
                 f'</text></g>'
             )
 
-    # ANSI palette dots at bottom
     pal_y = start_y + len(info_lines) * line_h + 12
     delay = len(info_lines) * STAGGER
     
@@ -119,11 +122,14 @@ def render():
     parts.append('</g>')
 
     parts.append('</svg>')
-    return "".join(parts)
+    svg_raw = "".join(parts)
+    # Strict XML validation check
+    ET.fromstring(svg_raw)
+    return svg_raw
 
 
 if __name__ == "__main__":
     svg = render()
     with open(OUT, "w", encoding="utf-8") as f:
         f.write(svg)
-    print(f"wrote {OUT} ({len(svg)} bytes)")
+    print(f"Validated and wrote {OUT} ({len(svg)} bytes)")
