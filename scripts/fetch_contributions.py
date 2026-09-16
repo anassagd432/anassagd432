@@ -7,13 +7,15 @@ monthly totals, public/private split).
 Two modes:
 
 1. AUTHENTICATED (preferred) -- if GH_TOKEN / PROFILE_TOKEN / GITHUB_TOKEN is
-   set, query the GitHub GraphQL API as the profile owner. This is the ONLY
-   mode that sees PRIVATE contributions, and private is where most of the real
-   work happens: without it the graph silently drops the majority of commits.
+   set, query the GitHub GraphQL API as the profile owner. With the `read:user`
+   scope this is the only mode that can report the public/private SPLIT and the
+   commit/PR/issue breakdown.
 
 2. PUBLIC FALLBACK -- no token available. Scrapes the public contributions
-   fragment (the same HTML the profile page uses), which reports PUBLIC
-   contributions only. The graph will undercount badly in this mode.
+   fragment (the same HTML the profile page uses). How complete this is depends
+   entirely on the account's "Include private contributions on my profile"
+   setting: with it ON the fragment reports private counts too (so the total is
+   correct), but the public/private split is never available from this source.
 
 Run daily by .github/workflows/update-profile-art.yml.
 """
@@ -118,21 +120,21 @@ def fetch_days_authenticated(token):
 
     private = coll.get("restrictedContributionsCount") or 0
     private_repos = token_private_repo_count(token)
-    can_see_private = private_repos is not None
+    scope_ok = private_repos is not None
+    # Either signal is enough to know private contributions are in the total.
+    includes_private = scope_ok or private > 0
 
-    if not can_see_private:
+    if not includes_private:
         print(
-            "WARNING: token is missing the `user`/`read:user` scope, so private "
-            "contributions are invisible -- the total below is PUBLIC ONLY.",
+            "WARNING: private contributions appear invisible to this token (no "
+            "`user`/`read:user` scope, and 0 private contributions reported) -- "
+            "the total below may be PUBLIC ONLY.",
             file=sys.stderr,
         )
-    elif private == 0:
-        print("note: token can see private repos, and reports 0 private contributions.",
-              file=sys.stderr)
 
     return days, {
         "source": "graphql-authenticated",
-        "includes_private": can_see_private,
+        "includes_private": includes_private,
         "total": cal["totalContributions"],
         "private": private,
         "private_repos_visible": private_repos,
@@ -176,9 +178,12 @@ def fetch_days_public():
     days.sort(key=lambda d: d["date"])
     return days, {
         "source": "public-html",
-        "includes_private": False,
+        # Whether private contributions are included depends on the account's
+        # "Include private contributions on my profile" setting, which this
+        # source cannot report -- hence unknown rather than False.
+        "includes_private": None,
         "total": sum(d["count"] for d in days),
-        "private": 0,
+        "private": None,
         "private_repos_visible": None,
         "commits": None,
         "pull_requests": None,
@@ -246,7 +251,7 @@ def build_data(days, meta):
         "range": {"start": days[0]["date"], "end": days[-1]["date"]} if days else {"start": "", "end": ""},
         "total_contributions": total,
         "private_contributions": meta["private"],
-        "public_contributions": total - meta["private"],
+        "public_contributions": (total - meta["private"]) if meta["private"] is not None else None,
         "private_repos_visible": meta.get("private_repos_visible"),
         "breakdown": {
             "commits": meta["commits"],
@@ -275,8 +280,10 @@ if __name__ == "__main__":
             days, meta = fetch_days_public()
     else:
         print(
-            "WARNING: no GH_TOKEN/PROFILE_TOKEN set -- falling back to the public "
-            "scrape, which EXCLUDES private contributions and will undercount badly.",
+            "note: no GH_TOKEN/PROFILE_TOKEN set -- using the public contributions "
+            "fragment. The total is correct as long as 'Include private "
+            "contributions on my profile' is enabled, but the public/private split "
+            "and the commit/PR/issue breakdown require a token with `read:user`.",
             file=sys.stderr,
         )
         days, meta = fetch_days_public()
@@ -286,9 +293,12 @@ if __name__ == "__main__":
     with open(OUT_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
+    split = ""
+    if data["private_contributions"] is not None:
+        split = (f" ({data['public_contributions']} public + "
+                 f"{data['private_contributions']} private)")
     print(
-        f"wrote {OUT_PATH}: {data['total_contributions']} contributions "
-        f"({data['public_contributions']} public + {data['private_contributions']} private) "
+        f"wrote {OUT_PATH}: {data['total_contributions']} contributions{split} "
         f"via {data['source']}, current streak {data['current_streak']['length']}, "
         f"longest streak {data['longest_streak']['length']}"
     )
