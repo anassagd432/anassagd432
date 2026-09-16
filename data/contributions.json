@@ -1,25 +1,25 @@
 {
   "username": "anassagd432",
-  "generated_at": "2026-09-16T19:30:35Z",
-  "source": "graphql-authenticated",
-  "includes_private": true,
+  "generated_at": "2026-09-16T19:31:13Z",
+  "source": "public-html",
+  "includes_private": null,
   "range": {
     "start": "2025-09-14",
     "end": "2026-09-16"
   },
-  "total_contributions": 938,
-  "private_contributions": 684,
-  "public_contributions": 254,
+  "total_contributions": 939,
+  "private_contributions": null,
+  "public_contributions": null,
   "private_repos_visible": null,
   "breakdown": {
-    "commits": 231,
-    "pull_requests": 7,
-    "issues": 5,
-    "reviews": 0,
-    "repositories": 10
+    "commits": null,
+    "pull_requests": null,
+    "issues": null,
+    "reviews": null,
+    "repositories": null
   },
-  "active_days": 142,
-  "avg_per_active_day": 6.6,
+  "active_days": 135,
+  "avg_per_active_day": 7.0,
   "current_streak": {
     "length": 18,
     "start": "2026-08-30",
@@ -32,7 +32,7 @@
   },
   "best_day": {
     "date": "2026-01-22",
-    "count": 60
+    "count": 61
   },
   "monthly": [
     {
@@ -85,7 +85,7 @@
     },
     {
       "month": "2026-09",
-      "total": 38
+      "total": 39
     }
   ],
   "days": [
@@ -535,7 +535,7 @@
     },
     {
       "date": "2026-01-03",
-      "count": 1
+      "count": 0
     },
     {
       "date": "2026-01-04",
@@ -555,15 +555,15 @@
     },
     {
       "date": "2026-01-08",
-      "count": 45
+      "count": 43
     },
     {
       "date": "2026-01-09",
-      "count": 20
+      "count": 21
     },
     {
       "date": "2026-01-10",
-      "count": 26
+      "count": 27
     },
     {
       "date": "2026-01-11",
@@ -571,7 +571,7 @@
     },
     {
       "date": "2026-01-12",
-      "count": 2
+      "count": 1
     },
     {
       "date": "2026-01-13",
@@ -579,7 +579,7 @@
     },
     {
       "date": "2026-01-14",
-      "count": 16
+      "count": 17
     },
     {
       "date": "2026-01-15",
@@ -607,11 +607,11 @@
     },
     {
       "date": "2026-01-21",
-      "count": 1
+      "count": 0
     },
     {
       "date": "2026-01-22",
-      "count": 60
+      "count": 61
     },
     {
       "date": "2026-01-23",
@@ -639,11 +639,11 @@
     },
     {
       "date": "2026-01-29",
-      "count": 18
+      "count": 17
     },
     {
       "date": "2026-01-30",
-      "count": 6
+      "count": 7
     },
     {
       "date": "2026-01-31",
@@ -667,7 +667,7 @@
     },
     {
       "date": "2026-02-05",
-      "count": 8
+      "count": 9
     },
     {
       "date": "2026-02-06",
@@ -683,11 +683,11 @@
     },
     {
       "date": "2026-02-09",
-      "count": 5
+      "count": 4
     },
     {
       "date": "2026-02-10",
-      "count": 4
+      "count": 5
     },
     {
       "date": "2026-02-11",
@@ -851,11 +851,11 @@
     },
     {
       "date": "2026-03-23",
-      "count": 8
+      "count": 9
     },
     {
       "date": "2026-03-24",
-      "count": 25
+      "count": 26
     },
     {
       "date": "2026-03-25",
@@ -895,11 +895,11 @@
     },
     {
       "date": "2026-04-03",
-      "count": 2
+      "count": 1
     },
     {
       "date": "2026-04-04",
-      "count": 14
+      "count": 15
     },
     {
       "date": "2026-04-05",
@@ -1171,11 +1171,11 @@
     },
     {
       "date": "2026-06-11",
-      "count": 1
+      "count": 0
     },
     {
       "date": "2026-06-12",
-      "count": 1
+      "count": 2
     },
     {
       "date": "2026-06-13",
@@ -1415,11 +1415,11 @@
     },
     {
       "date": "2026-08-11",
-      "count": 1
+      "count": 0
     },
     {
       "date": "2026-08-12",
-      "count": 3
+      "count": 4
     },
     {
       "date": "2026-08-13",
@@ -1559,7 +1559,7 @@
     },
     {
       "date": "2026-09-16",
-      "count": 3
+      "count": 4
     }
   ]
 }
