@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .DS_Store
 test.png
+
+# agent workspace / local notes -- not for a public profile repo
+.workbuddy-ai/

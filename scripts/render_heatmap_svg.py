@@ -101,7 +101,7 @@ def render(data):
             break
 
     canvas_w = PAD + LEFT_LABEL_W + art_w + PAD
-    stats_h = 88
+    stats_h = 112
     canvas_h = TITLEBAR_H + TOP_LABEL_H + art_h + stats_h + PAD
 
     css = f"""
@@ -175,8 +175,17 @@ def render(data):
     total = data["total_contributions"]
     best = data["best_day"]
     rng = data["range"]
+    private = data.get("private_contributions", 0) or 0
+    public = data.get("public_contributions", total - private)
+    bd = data.get("breakdown") or {}
 
-    ly = sep_y + 24
+    # real generation time, rendered straight from the data (not a placeholder)
+    updated = ""
+    if data.get("generated_at"):
+        updated = data["generated_at"].replace("T", " ").replace("Z", "").rstrip()
+        updated = updated[:16] + " UTC"
+
+    ly = sep_y + 26
     # left column: big highlighted numbers; right column: context in muted
     parts.append(f'<text x="{PAD}" y="{ly}" font-size="13" fill="{GREEN}">'
                  f'<tspan font-weight="700">{total:,}</tspan>'
@@ -190,6 +199,24 @@ def render(data):
                  f'<tspan fill="{ACCENT}" font-weight="700">{ls} days</tspan></text>')
     parts.append(f'<text x="{canvas_w - PAD}" y="{ly}" font-size="12" fill="{MUTED}" text-anchor="end">'
                  f'best day <tspan fill="{GOLD}" font-weight="700">{best["count"]}</tspan> on {best["date"]}</text>')
+
+    # line 3: what the total is actually made of, plus when it was last refreshed
+    ly += 22
+    bits = []
+    if private:
+        bits.append(f'<tspan fill="{TEXT}">{public:,}</tspan><tspan fill="{MUTED}"> public</tspan>')
+        bits.append(f'<tspan fill="{TEXT}">{private:,}</tspan><tspan fill="{MUTED}"> private</tspan>')
+    for label, key in (("commits", "commits"), ("PRs", "pull_requests"), ("issues", "issues")):
+        if bd.get(key):
+            bits.append(f'<tspan fill="{TEXT}">{bd[key]:,}</tspan><tspan fill="{MUTED}"> {label}</tspan>')
+    if bd.get("repositories"):
+        bits.append(f'<tspan fill="{TEXT}">{bd["repositories"]:,}</tspan><tspan fill="{MUTED}"> repos</tspan>')
+    if bits:
+        sep = f'<tspan fill="{MUTED}">  &#183;  </tspan>'
+        parts.append(f'<text x="{PAD}" y="{ly}" font-size="11">' + sep.join(bits) + '</text>')
+    if updated:
+        parts.append(f'<text x="{canvas_w - PAD}" y="{ly}" font-size="11" fill="{MUTED}" '
+                     f'text-anchor="end">updated {updated}</text>')
 
     parts.append("</svg>")
     return "".join(parts)

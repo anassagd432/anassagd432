@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 """
-Scrape real daily contribution counts from GitHub's public, unauthenticated
-contributions endpoint (the same fragment the profile page itself uses) and
-write data/contributions.json with the raw days plus derived stats
-(current streak, longest streak, best day, monthly totals).
+Fetch the real daily contribution counts for the profile README heatmap and
+write data/contributions.json (raw days + derived stats: streaks, best day,
+monthly totals, public/private split).
 
-No token, no auth, no GraphQL -- just the public HTML GitHub already serves.
+Two modes:
+
+1. AUTHENTICATED (preferred) -- if GH_TOKEN / PROFILE_TOKEN / GITHUB_TOKEN is
+   set, query the GitHub GraphQL API as the profile owner. This is the ONLY
+   mode that sees PRIVATE contributions, and private is where most of the real
+   work happens: without it the graph silently drops the majority of commits.
+
+2. PUBLIC FALLBACK -- no token available. Scrapes the public contributions
+   fragment (the same HTML the profile page uses), which reports PUBLIC
+   contributions only. The graph will undercount badly in this mode.
+
 Run daily by .github/workflows/update-profile-art.yml.
 """
 import datetime
@@ -14,16 +23,133 @@ import os
 import re
 import sys
 
-import requests
-from bs4 import BeautifulSoup
-
 USERNAME = os.environ.get("GH_PROFILE_USER", "anassagd432")
-URL = f"https://github.com/users/{USERNAME}/contributions"
 OUT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "contributions.json")
 
+GRAPHQL_URL = "https://api.github.com/graphql"
+PUBLIC_URL = f"https://github.com/users/{USERNAME}/contributions"
 
-def fetch_days():
-    resp = requests.get(URL, headers={"User-Agent": "profile-readme-bot/1.0"}, timeout=30)
+GRAPHQL_QUERY = """
+query($login: String!, $from: DateTime!, $to: DateTime!) {
+  user(login: $login) {
+    contributionsCollection(from: $from, to: $to) {
+      restrictedContributionsCount
+      totalCommitContributions
+      totalPullRequestContributions
+      totalIssueContributions
+      totalPullRequestReviewContributions
+      totalRepositoriesWithContributedCommits
+      contributionCalendar {
+        totalContributions
+        weeks { contributionDays { date contributionCount } }
+      }
+    }
+  }
+}
+""".strip()
+
+
+def _token():
+    for key in ("GH_TOKEN", "PROFILE_TOKEN", "GITHUB_TOKEN"):
+        val = os.environ.get(key)
+        if val and val.strip():
+            return val.strip()
+    return None
+
+
+def token_private_repo_count(token):
+    """REST /user only returns `total_private_repos` when the token carries the
+    `user` scope -- and that same scope is what makes contributionsCollection
+    report private contributions. Returns None when the scope is missing, which
+    is how we tell "genuinely zero private work" apart from "can't see it"."""
+    import requests
+
+    try:
+        resp = requests.get(
+            "https://api.github.com/user",
+            headers={"Authorization": f"bearer {token}", "User-Agent": "profile-readme-bot/1.0"},
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            return None
+        return resp.json().get("total_private_repos")
+    except Exception:  # noqa: BLE001 -- best-effort probe only
+        return None
+
+
+def fetch_days_authenticated(token):
+    """GraphQL as the owner -- includes private contributions when the token
+    carries the `user` scope."""
+    import requests
+
+    today = datetime.date.today()
+    since = today - datetime.timedelta(days=365)
+    # GitHub's profile calendar always starts on a Sunday -- align so the grid
+    # matches the profile page cell-for-cell.
+    since -= datetime.timedelta(days=(since.weekday() + 1) % 7)
+    payload = {
+        "query": GRAPHQL_QUERY,
+        "variables": {
+            "login": USERNAME,
+            "from": since.isoformat() + "T00:00:00Z",
+            "to": today.isoformat() + "T23:59:59Z",
+        },
+    }
+    resp = requests.post(
+        GRAPHQL_URL,
+        json=payload,
+        headers={"Authorization": f"bearer {token}", "User-Agent": "profile-readme-bot/1.0"},
+        timeout=30,
+    )
+    resp.raise_for_status()
+    body = resp.json()
+    if body.get("errors"):
+        raise RuntimeError(f"GraphQL errors: {body['errors']}")
+
+    coll = body["data"]["user"]["contributionsCollection"]
+    cal = coll["contributionCalendar"]
+    days = []
+    for week in cal["weeks"]:
+        for d in week["contributionDays"]:
+            days.append({"date": d["date"], "count": d["contributionCount"]})
+    days.sort(key=lambda d: d["date"])
+    if not days:
+        raise RuntimeError("GraphQL returned an empty contribution calendar")
+
+    private = coll.get("restrictedContributionsCount") or 0
+    private_repos = token_private_repo_count(token)
+    can_see_private = private_repos is not None
+
+    if not can_see_private:
+        print(
+            "WARNING: token is missing the `user`/`read:user` scope, so private "
+            "contributions are invisible -- the total below is PUBLIC ONLY.",
+            file=sys.stderr,
+        )
+    elif private == 0:
+        print("note: token can see private repos, and reports 0 private contributions.",
+              file=sys.stderr)
+
+    return days, {
+        "source": "graphql-authenticated",
+        "includes_private": can_see_private,
+        "total": cal["totalContributions"],
+        "private": private,
+        "private_repos_visible": private_repos,
+        "commits": coll.get("totalCommitContributions"),
+        "pull_requests": coll.get("totalPullRequestContributions"),
+        "issues": coll.get("totalIssueContributions"),
+        "reviews": coll.get("totalPullRequestReviewContributions"),
+        "repos": coll.get("totalRepositoriesWithContributedCommits"),
+    }
+
+
+def fetch_days_public():
+    """Public HTML fragment -- PUBLIC contributions only, no auth."""
+    import requests
+    from bs4 import BeautifulSoup
+
+    resp = requests.get(PUBLIC_URL, headers={"User-Agent": "profile-readme-bot/1.0"}, timeout=30)
     resp.raise_for_status()
     soup = BeautifulSoup(resp.text, "html.parser")
 
@@ -48,7 +174,18 @@ def fetch_days():
         days.append({"date": date, "count": count})
 
     days.sort(key=lambda d: d["date"])
-    return days
+    return days, {
+        "source": "public-html",
+        "includes_private": False,
+        "total": sum(d["count"] for d in days),
+        "private": 0,
+        "private_repos_visible": None,
+        "commits": None,
+        "pull_requests": None,
+        "issues": None,
+        "reviews": None,
+        "repos": None,
+    }
 
 
 def compute_current_streak(days):
@@ -88,7 +225,7 @@ def compute_longest_streak(days):
     return longest, longest_start, longest_end
 
 
-def build_data(days):
+def build_data(days, meta):
     total = sum(d["count"] for d in days)
     active_days = sum(1 for d in days if d["count"] > 0)
     best = max(days, key=lambda d: d["count"]) if days else {"date": "N/A", "count": 0}
@@ -104,8 +241,20 @@ def build_data(days):
     return {
         "username": USERNAME,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": meta["source"],
+        "includes_private": meta["includes_private"],
         "range": {"start": days[0]["date"], "end": days[-1]["date"]} if days else {"start": "", "end": ""},
         "total_contributions": total,
+        "private_contributions": meta["private"],
+        "public_contributions": total - meta["private"],
+        "private_repos_visible": meta.get("private_repos_visible"),
+        "breakdown": {
+            "commits": meta["commits"],
+            "pull_requests": meta["pull_requests"],
+            "issues": meta["issues"],
+            "reviews": meta["reviews"],
+            "repositories": meta["repos"],
+        },
         "active_days": active_days,
         "avg_per_active_day": round(total / active_days, 1) if active_days else 0,
         "current_streak": {"length": cur_len, "start": cur_start, "end": cur_end},
@@ -117,11 +266,29 @@ def build_data(days):
 
 
 if __name__ == "__main__":
-    days = fetch_days()
-    data = build_data(days)
+    token = _token()
+    if token:
+        try:
+            days, meta = fetch_days_authenticated(token)
+        except Exception as exc:  # noqa: BLE001 -- fall back rather than fail the job
+            print(f"authenticated fetch failed ({exc}); falling back to public scrape", file=sys.stderr)
+            days, meta = fetch_days_public()
+    else:
+        print(
+            "WARNING: no GH_TOKEN/PROFILE_TOKEN set -- falling back to the public "
+            "scrape, which EXCLUDES private contributions and will undercount badly.",
+            file=sys.stderr,
+        )
+        days, meta = fetch_days_public()
+
+    data = build_data(days, meta)
     os.makedirs(os.path.dirname(OUT_PATH), exist_ok=True)
     with open(OUT_PATH, "w") as f:
         json.dump(data, f, indent=2)
-    print(f"wrote {OUT_PATH}: {data['total_contributions']} contributions, "
-          f"current streak {data['current_streak']['length']}, "
-          f"longest streak {data['longest_streak']['length']}")
+
+    print(
+        f"wrote {OUT_PATH}: {data['total_contributions']} contributions "
+        f"({data['public_contributions']} public + {data['private_contributions']} private) "
+        f"via {data['source']}, current streak {data['current_streak']['length']}, "
+        f"longest streak {data['longest_streak']['length']}"
+    )
